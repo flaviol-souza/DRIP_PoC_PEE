@@ -1,4 +1,5 @@
 #include "f3411_messages.h"
+#include "drip_time.h"   // drip_timestamp() - populates F3411System.timestamp
 #include <string.h>
 #include <math.h>
 
@@ -126,6 +127,11 @@ F3411System f3411_build_system(double op_lat, double op_lon, float op_alt_m) {
     msg.area_floor     = f3411_encode_altitude(0.0f);
     msg.ua_classification = 0x00;
     msg.op_alt_geodetic   = f3411_encode_altitude(op_alt_m);
+
+    // ASTM Table 11 offset 20: 32-bit DRIP-epoch Unix timestamp, "time of
+    // applicability" of this message - i.e. now. Was previously left at zero
+    // (folded into the struct's old reserved[5]); see f3411_messages.h.
+    msg.timestamp = drip_timestamp();
 
     return msg;
 }

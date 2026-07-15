@@ -186,7 +186,12 @@ def decode_operator_id(m):
 
 
 def decode_system(m):
-    """ASTM Table 11 (multi-byte numeric fields are little-endian)."""
+    """ASTM F3411-22a Table 11 (multi-byte numeric fields are little-endian).
+    Offset 20/len 4 = Timestamp (32-bit DRIP-epoch Unix seconds, "time of
+    applicability"); offset 24/len 1 = genuinely Reserved (not decoded).
+    NOTE: firmware builds prior to the F3411System struct fix left this field
+    zero-filled (it was folded into a 5-byte `reserved` array); timestamp_unix
+    will read as a constant, meaningless value against those older captures."""
     return {"flags": m[1],
             "operator_lat": struct.unpack('<i', m[2:6])[0] / 1e7,
             "operator_lon": struct.unpack('<i', m[6:10])[0] / 1e7,

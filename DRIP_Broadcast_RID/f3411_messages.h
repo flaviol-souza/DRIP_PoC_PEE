@@ -96,7 +96,7 @@ struct __attribute__((packed)) F3411Location {
 };
 static_assert(sizeof(F3411Location) == 25, "");
 
-// System Message — ASTM F3411-22a Table 7
+// System Message — ASTM F3411-22a Table 11
 struct __attribute__((packed)) F3411System {
     uint8_t  type_ver;          // 0x42
     uint8_t  flags;             // operator loc type (7-6) | class type (5-3) | reserved (2-0)
@@ -108,7 +108,16 @@ struct __attribute__((packed)) F3411System {
     uint16_t area_floor;        // altitude encoding
     uint8_t  ua_classification; // UA category (type-specific per flags.class_type)
     uint16_t op_alt_geodetic;   // operator altitude, same encoding
-    uint8_t  reserved[5];
+    // Table 11 offset 20, length 4: "Time of applicability of Location Message
+    // expressed as a 32-bit Unix Timestamp (UTC) in seconds since... 2019-01-01"
+    // i.e. the same DRIP-epoch second count drip_timestamp() returns. Populated
+    // in f3411_build_system() — previously this was folded into `reserved[5]`
+    // and always left at zero, which is non-conformant (ASTM mandates this
+    // field; only the trailing 1 byte at offset 24 is truly reserved) and, per
+    // RFC 9434 §9.5 (citing §3.3 and §6), undermines DRIP's own freshness and
+    // multilateration-consistency use of broadcast timestamps.
+    uint32_t timestamp;
+    uint8_t  reserved;          // Table 11 offset 24, length 1: genuinely reserved
 };
 static_assert(sizeof(F3411System) == 25, "");
 

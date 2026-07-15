@@ -5,8 +5,9 @@
 //
 // Transmission cycle — 3 Hz, rotating across three phases:
 //
-//   Cycle A (g_cycle % 3 == 0)  — DRIP Wrapper  — 9 messages
-//     [0] Basic ID   [1] Location   [2] System   [3-8] Auth Wrapper (6 pages)
+//   Cycle A (g_cycle % 3 == 0)  — DRIP Wrapper  — 8 messages
+//     [0] Basic ID   [1] Location   [2] System   [3-7] Auth Wrapper (5 pages,
+//     Extended Transport, RFC 9575 §4.3.2 — Evidence cleared on the wire)
 //
 //   Cycle B (g_cycle % 3 == 1)  — DRIP Link / BE chain — 9 messages
 //     [0] Basic ID   [1] Location   [2-8] Auth Link (7 pages, BE Figure 5)
@@ -88,9 +89,10 @@ void setup() {
     if (!det_load_hardcoded(g_kp)) {
         Serial.println("[WARN] Ed25519 unavailable -- signatures will be zero-filled");
     }
-    Serial.print("[DET] HHIT: ");
-    for (int i = 0; i < DET_BYTES; i++) Serial.printf("%02X", g_kp.det[i]);
-    Serial.println();
+    // NOTE: det_load_hardcoded() already prints "[DET] DET = ..." and the
+    // "[DET] expected (PoC) = ..." check above. A duplicate print here (the
+    // older "[DET] HHIT: ..." line) was removed to avoid two labels for the
+    // same bytes confusing the serial log.
 
     beacon_tx_init();
     drip_manifest_init(&g_manifest);

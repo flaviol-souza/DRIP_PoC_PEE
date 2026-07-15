@@ -17,6 +17,7 @@ static bool     g_started   = false;   // false until the first point has been e
 // Real-timestamp pacing state (Option A: hold each recorded point for its real
 // recorded duration, instead of one point per fixed 0.333 s cycle).
 static float    g_hold_elapsed_s = 0;   // TX seconds accumulated while holding g_idx
+static uint32_t g_last_call_ms   = 0;   // millis() at the previous call, for MEASURED pacing
 // Velocity that carried the drone INTO g_idx (i.e. from g_idx-1 to g_idx), held
 // constant on the wire while broadcast waits for real time to reach the next
 // recorded point. Zero for the first point of a track (no prior point to derive it).
@@ -76,6 +77,7 @@ bool drone_playback_init() {
     g_stopped_by_user = false;
     g_started = false;
     g_hold_elapsed_s = 0;
+    g_last_call_ms = 0;
     g_cur_speed = g_cur_vspeed = g_cur_heading = 0;
     g_ready = true;
     Serial.printf("[Playback] %u flight(s) compiled in.\n", DRONE_FLIGHT_COUNT);
@@ -98,6 +100,7 @@ void drone_playback_reset() {
     g_stopped_by_user = false;
     g_started = false;                         // next call re-emits point 0 fresh
     g_hold_elapsed_s = 0;
+    g_last_call_ms = 0;                        // next call measures from a clean start
     g_cur_speed = g_cur_vspeed = g_cur_heading = 0;
 }
 
@@ -179,12 +182,29 @@ DronePosition drone_playback_next(uint32_t live_unix_time_s) {
     // segment rather than being inflated by assuming a constant 0.333 s gap.
     // The velocity shown is held constant for the whole hold (it represents the
     // motion that carried the drone INTO the current point).
+    //
+    // BUG FIX: g_hold_elapsed_s used to be incremented by the ASSUMED cycle
+    // duration (PLAYBACK_CYCLE_S = 0.333 s) every call, regardless of how long
+    // the cycle actually took. loop()'s real period is delay(333) PLUS whatever
+    // that cycle's processing costs (Ed25519 signing on Wrapper/Manifest cycles,
+    // the Wi-Fi vendor-IE update, and especially verbose drip_debug serial
+    // output) -- none of that was accounted for, so the internal pacing clock
+    // silently drifted from real wall-clock time. Measured in practice: a
+    // 700 s (11.7 min) flight took ~1440 s (24 min) to play back, a ~2.06x
+    // drift, implying the real cycle was taking ~686 ms, not the assumed 333 ms.
+    // Fix: measure the ACTUAL elapsed time via millis() and add THAT instead,
+    // so pacing is correct regardless of how long any given cycle takes.
+    uint32_t now_ms = millis();
+    float real_elapsed_s = (g_last_call_ms == 0) ? PLAYBACK_CYCLE_S
+                                                  : (now_ms - g_last_call_ms) / 1000.0f;
+    g_last_call_ms = now_ms;
+
     if (!g_started) {
         g_started = true;                  // first emission: no prior point yet
         g_hold_elapsed_s = 0;
         g_cur_speed = g_cur_vspeed = g_cur_heading = 0;
     } else if (!g_finished) {
-        g_hold_elapsed_s += PLAYBACK_CYCLE_S;
+        g_hold_elapsed_s += real_elapsed_s;   // MEASURED, not assumed
         if (g_idx + 1 < n) {
             double next_lat, next_lon; float next_alt; uint32_t next_ts;
             if (read_point(g_flight, g_idx + 1, &next_lat, &next_lon, &next_alt, &next_ts)) {

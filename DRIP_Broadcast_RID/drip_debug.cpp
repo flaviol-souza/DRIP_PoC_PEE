@@ -122,36 +122,26 @@ static void annotate_sam(const uint8_t *sam, uint8_t length) {
         Serial.print  ("         Sig(parent): "); print_hex_inline(&sam[73], 16);
         Serial.println("...(64B)");
     } else if (sam_type == 0x02) {
-        // DRIP Wrapper — RFC 9575 §4.1 Figure 4 / §4.3 (Round-2 layout, R2):
-        //   0x02 ‖ VNB(4) ‖ VNA(4) ‖ wrapped msg(s) (25×N) ‖ DET(16) ‖ Sig(64)
+        // DRIP Wrapper over EXTENDED TRANSPORT — RFC 9575 §4.3.2 / Figure 7.
+        //   0x02 ‖ VNB(4) ‖ VNA(4) ‖ DET(16) ‖ Sig(64) = 89 octets, FIXED size.
+        // Evidence is CLEARED on the wire (this is the whole point of Extended
+        // Transport: the signed ASTM messages are the pack's own co-located
+        // messages, not re-transmitted inside the Wrapper). So wrappedCount is
+        // ALWAYS 0 here by design — it is not a decode failure. A receiver
+        // reconstructs the signed Evidence from the pack's non-Auth messages
+        // (see the observer's odid.reconstruct_wrapper_evidence()).
         Serial.printf("         VNB=%u  VNA=%u\n", le32(&sam[1]), le32(&sam[5]));
 
-        // §4.3.1 Figure 6: wrapperLength = octets between VNA and DET;
-        // wrappedCount = wrapperLength / 25, DECODE_FAILURE on nonzero modulo.
-        int wrapper_len = (int)length - 1 - 8 - 16 - 64;
-        if (wrapper_len < 0 || (wrapper_len % 25) != 0) {
-            Serial.printf("         !! DECODE_FAILURE: wrapperLength=%d not a "
-                          "multiple of 25 (RFC 9575 §4.3.1)\n", wrapper_len);
+        if (length != 89) {
+            Serial.printf("         !! unexpected Wrapper length %u (expected 89, "
+                          "Extended Transport)\n", length);
         } else {
-            uint8_t count = (uint8_t)(wrapper_len / 25);
-            if (count > 4) {
-                Serial.printf("         !! DECODE_FAILURE: wrappedCount=%u > 4 "
-                              "(RFC 9575 §4.3.1)\n", count);
-            } else {
-                Serial.printf("         wrappedCount=%u (derived, %d/25)\n",
-                              count, wrapper_len);
-                for (uint8_t w = 0; w < count; w++) {
-                    const uint8_t *wm = &sam[9 + (size_t)w * 25];
-                    Serial.printf("         wrapped[%u]: %s (type=0x%X) ",
-                                  w, msg_type_str((wm[0] >> 4) & 0x0F),
-                                  (wm[0] >> 4) & 0x0F);
-                    print_hex_inline(wm, 25); Serial.println();
-                }
-                const uint8_t *det = &sam[9 + (size_t)count * 25];
-                Serial.print  ("         UA DET     : "); print_hex_inline(det, 16); Serial.println();
-                Serial.print  ("         Sig (UA)   : "); print_hex_inline(det + 16, 16);
-                Serial.println("...(64B)");
-            }
+            Serial.println("         Evidence: (cleared - Extended Transport, "
+                           "signed over the co-located pack messages)");
+            const uint8_t *det = &sam[9];
+            Serial.print  ("         UA DET     : "); print_hex_inline(det, 16); Serial.println();
+            Serial.print  ("         Sig (UA)   : "); print_hex_inline(det + 16, 16);
+            Serial.println("...(64B)");
         }
     } else if (sam_type == 0x03) {
         // DRIP Manifest — RFC 9575 §4.1 Figure 4 / §4.4 (Round-2 layout, R3):
