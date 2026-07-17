@@ -1,5 +1,6 @@
 #pragma once
 #include <stdint.h>
+#include "drip_hierarchy.h"
 #include <stddef.h>
 
 // ---------------------------------------------------------------------------
@@ -48,8 +49,11 @@
 // NOTE: every fleet slot shares RAA/HDA on purpose — one HDA registering
 // several UAs is exactly the real hierarchy shape (RFC 9575 §6.4.2). Only the
 // ORCHID hash (lower 64 bits), which is key-derived, differs between slots.
-#define HHIT_TEST_RAA       1000u   // 0x03E8  (14-bit field)
-#define HHIT_TEST_HDA       2000u   // 0x07D0  (14-bit field)
+// The UA hierarchy numbers now live in ONE place for the whole project.
+// Change them in drip_hierarchy.h, never here. The old names are kept as
+// aliases so existing call sites (and any external notes) still work.
+#define HHIT_TEST_RAA       DRIP_UA_RAA
+#define HHIT_TEST_HDA       DRIP_UA_HDA
 
 // How many hardcoded test identities exist in the slot table
 // (det_generator.cpp, IDENTITY_TABLE). To emulate more than 3 drones you must

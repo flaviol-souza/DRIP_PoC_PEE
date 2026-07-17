@@ -60,8 +60,8 @@
 
 #define FLEET_MAX               3      // <-- agreed scope cap; see note above
 
-#define FLEET_PACK_PERIOD_MS  333      // per drone: 3 Hz pack rebuild (A/B/C)
-#define FLEET_BEACON_PERIOD_MS 100     // per drone: ~10 Hz beacon repeat (100 TU)
+#define FLEET_PACK_PERIOD_MS  1000      // per drone: 3 Hz pack rebuild (A/B/C)
+#define FLEET_BEACON_PERIOD_MS 500     // per drone: ~10 Hz beacon repeat (100 TU)
 
 // One virtual UA.
 struct VirtualDrone {

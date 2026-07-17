@@ -1,0 +1,34 @@
+{
+  "_comment": [
+    "SINGLE SOURCE OF TRUTH for the DRIP hierarchy, Python side.",
+    "PUBLIC DATA ONLY - never put a private seed in this file.",
+    "The firmware's counterpart is drip_hierarchy.h. After editing EITHER, run:",
+    "    python3 check_hierarchy.py",
+    "which re-derives every DET from scratch, proves the zones nest per",
+    "RFC 9886 section 6, and proves this file and the header still agree.",
+    "TEST VALUES: no IANA registration stands behind them (RFC 9374 section 3.3)."
+  ],
+  "ua_raa": 1000,
+  "ua_hda": 2000,
+  "apex": {
+    "raa": 0,
+    "hda": 0,
+    "det": "2001003000000005881EC7928833E0FB",
+    "public_key": "4FD099CCD47D7893DFE9EC24414ECB0D9B5420232AAD30D91C465BE33CBE65C4",
+    "_role": "trust anchor. Replaces observer.py's hardcoded APEX_HI/APEX_DET. Under RFC 9886 section 7.1 this is what DNSSEC would anchor."
+  },
+  "raa": {
+    "raa": 1000,
+    "hda": 0,
+    "det": "20010030FA00000532FDCBFEB2F43C02",
+    "public_key": "DDE3BCCEC7F3A66A1115F45D720F4DC135C3AE7C4E22DCA38FDB1EFD6A495FF8",
+    "_role": "Registered Assigning Authority. RAA number must equal ua_raa; hda is 0 (an RAA hands out HDA numbers, it has none)."
+  },
+  "hda": {
+    "raa": 1000,
+    "hda": 2000,
+    "det": "20010030FA07D0058462788F47C8B813",
+    "public_key": "13D9908A70925992ED546007D27F50DA68BA7217EF62AC3CCA784529FF10471C",
+    "_role": "HHIT Domain Authority - registers the UAs. Must carry BOTH ua_raa and ua_hda or its /56 zone will not contain them."
+  }
+}

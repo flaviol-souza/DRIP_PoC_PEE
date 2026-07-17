@@ -1,4 +1,5 @@
 #include "drip_registration.h"
+#include "drip_hierarchy.h"
 
 #ifdef DRIP_TEST_BE
 
@@ -23,15 +24,9 @@
 // values independently. Nothing enforces that agreement — it is exactly the
 // gap the RFC 9886 DNS work is meant to close.
 // ---------------------------------------------------------------------------
-static const uint8_t APEX_SEED[32] = {
-    0xA0,0xA1,0xA2,0xA3,0xA4,0xA5,0xA6,0xA7, 0xA8,0xA9,0xAA,0xAB,0xAC,0xAD,0xAE,0xAF,
-    0xB0,0xB1,0xB2,0xB3,0xB4,0xB5,0xB6,0xB7, 0xB8,0xB9,0xBA,0xBB,0xBC,0xBD,0xBE,0xBF };
-static const uint8_t RAA_SEED[32] = {
-    0xC0,0xC1,0xC2,0xC3,0xC4,0xC5,0xC6,0xC7, 0xC8,0xC9,0xCA,0xCB,0xCC,0xCD,0xCE,0xCF,
-    0xD0,0xD1,0xD2,0xD3,0xD4,0xD5,0xD6,0xD7, 0xD8,0xD9,0xDA,0xDB,0xDC,0xDD,0xDE,0xDF };
-static const uint8_t HDA_SEED[32] = {
-    0xE0,0xE1,0xE2,0xE3,0xE4,0xE5,0xE6,0xE7, 0xE8,0xE9,0xEA,0xEB,0xEC,0xED,0xEE,0xEF,
-    0xF0,0xF1,0xF2,0xF3,0xF4,0xF5,0xF6,0xF7, 0xF8,0xF9,0xFA,0xFB,0xFC,0xFD,0xFE,0xFF };
+static const uint8_t APEX_SEED[32] = DRIP_APEX_SEED_INIT;
+static const uint8_t RAA_SEED[32] = DRIP_RAA_SEED_INIT;
+static const uint8_t HDA_SEED[32] = DRIP_HDA_SEED_INIT;
 
 // Illustrative (NON-registered) HID values for the test hierarchy.
 // Only required to be internally consistent; not semantically meaningful.
@@ -42,12 +37,17 @@ static const uint8_t HDA_SEED[32] = {
 // register — and RFC 9886 derives the DNS zones from exactly those nibbles, so
 // this must be reconciled before a faithful DNS demo. It does not affect the
 // offline signature walk, which is why it is safe to defer.
-#define APEX_RAA 0x0000u
-#define APEX_HDA 0x0000u
-#define RAA_RAA  0x0001u
-#define RAA_HDA  0x0000u
-#define HDA_RAA  0x0001u
-#define HDA_HDA  0x0001u
+// Hierarchy numbers come from drip_hierarchy.h — the single source of truth.
+// They previously lived here as literals (0/0, 1/0, 1/1) while the UAs used
+// 1000/2000, which is self-consistent for the offline signature walk but
+// produces a chain whose zones do NOT nest (RFC 9886 §6) and therefore cannot
+// be delegated in DNS. See the historical note in drip_hierarchy.h.
+#define APEX_RAA DRIP_APEX_RAA
+#define APEX_HDA DRIP_APEX_HDA
+#define RAA_RAA  DRIP_RAA_RAA
+#define RAA_HDA  DRIP_RAA_HDA
+#define HDA_RAA  DRIP_HDA_RAA
+#define HDA_HDA  DRIP_HDA_HDA
 
 // ---------------------------------------------------------------------------
 // State
