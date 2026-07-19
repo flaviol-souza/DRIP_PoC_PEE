@@ -44,6 +44,12 @@ ERROR_CATALOG = {
                   "RFC 9374 3.5.2"),
     "E-KEY-01":  ("No public key known for this DET - signature/binding NOT checked",
                   "observer keyring (RFC 9374 3.5.2 binds a DET to one key)"),
+    # --- DET resolution against the trusted-identities file (identity_resolve.py) ---
+    "E-TRUST-01":("DET is not in the trusted-identities file at any level "
+                  "(no trusted HDA delegation, not individually enrolled)",
+                  "observer trusted-identities file (hierarchy.json 'ua'/'hda')"),
+    "E-ZONE-01": ("DET does not nest under any trusted RAA /44 or HDA /56 zone",
+                  "RFC 9886 6 (zone delegation is fixed by the RAA/HDA nibbles)"),
 
     # ---- W-* : WARNINGS. NOT conformance failures. -------------------------
     # A W- code means "unexpected for THIS bench emulator", never "violates a

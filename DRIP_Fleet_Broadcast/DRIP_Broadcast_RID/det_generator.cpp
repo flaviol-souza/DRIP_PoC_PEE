@@ -78,32 +78,36 @@ struct IdentityRow {
 
 static const IdentityRow IDENTITY_TABLE[DET_IDENTITY_SLOTS] = {
     // -----------------------------------------------------------------------
-    // SLOT 0 — the ORIGINAL single-drone PoC identity (unchanged)
-    //   seed origin : recorded on-device in sub-step 1a (legacy — predates the slot table)
-    //   DET         : 2001:30:fa07:d005:31e0:1aed:4e7e:cf5c
+    // SLOT 0 — externally-provided keypair (PKCS#8 seed), RAA=255 HDA=14340
+    //   seed origin : supplied private key MC4CAQAw...tZ3gX (PKCS#8 Ed25519),
+    //                 the 32-byte seed extracted from the DER OCTET STRING.
+    //   DET         : 2001:30:3ff8:405:d952:5618:fbc9:c3cf
+    //   NOTE: this is the DET this key TRULY derives at RAA=255/HDA=14340. It is
+    //   NOT the researcher's broadcast DET (...:d952:...), which belongs to a
+    //   different key we do not hold; that one could never pass the self-check.
     // -----------------------------------------------------------------------
     {
       {   // seed (Ed25519 private, RFC 8032)
-          0x56, 0x8B, 0xF5, 0xE8, 0xF0, 0x8A, 0xBA, 0xAD,
-          0xB6, 0x8B, 0xA1, 0x96, 0x4B, 0xC2, 0x5F, 0x29,
-          0x76, 0xA8, 0xAF, 0xC9, 0x38, 0x24, 0x4A, 0x39,
-          0xF7, 0x6E, 0x0A, 0xB0, 0xC7, 0x03, 0xCC, 0xD6
+          0x59, 0x12, 0x9C, 0x5C, 0x9A, 0xB2, 0xC7, 0xF1,
+          0x88, 0x01, 0x04, 0x32, 0x00, 0x23, 0x61, 0xD5,
+          0x13, 0xF2, 0x65, 0x24, 0x8D, 0x9E, 0x0B, 0xF0,
+          0xA0, 0x77, 0x0A, 0xD2, 0xED, 0x67, 0x78, 0x17
       },
       {   // pubkey (HI) — derived from the seed; self-checked at boot
-          0x8B, 0x65, 0xB2, 0x65, 0xA4, 0x96, 0xE3, 0x20,
-          0x46, 0xCF, 0xA3, 0x78, 0xB5, 0xA5, 0xFB, 0x2E,
-          0x87, 0x7A, 0x97, 0x72, 0x3E, 0x55, 0x7C, 0xB5,
-          0xF0, 0xD2, 0x18, 0x48, 0xBF, 0xE9, 0x44, 0x77
+          0xF5, 0x05, 0x70, 0x4E, 0xB5, 0x44, 0xF8, 0x61,
+          0x19, 0x0F, 0x2D, 0x8E, 0xDA, 0xC9, 0xBA, 0x83,
+          0xF3, 0x20, 0xD5, 0xE3, 0x87, 0x26, 0xB3, 0xF5,
+          0x1C, 0x22, 0x08, 0x51, 0x32, 0x0E, 0xC7, 0xE6
       },
       {   // expected DET — cSHAKE128 ORCHID, RFC 9374 3.5.2; self-checked at boot
-          0x20, 0x01, 0x00, 0x30, 0xFA, 0x07, 0xD0, 0x05,
-          0x31, 0xE0, 0x1A, 0xED, 0x4E, 0x7E, 0xCF, 0x5C
+          0x20, 0x01, 0x00, 0x30, 0x3F, 0xF8, 0x04, 0x05,
+          0xD9, 0x52, 0x56, 0x18, 0xFB, 0xC9, 0xC3, 0xCF
       }
     },
     // -----------------------------------------------------------------------
-    // SLOT 1 — fleet slot 1
+    // SLOT 1 — fleet slot 1  (same seed as before; DET changes with RAA/HDA)
     //   seed origin : shake128(b"DRIP PoC UA slot 1", 32)
-    //   DET         : 2001:30:fa07:d005:f3b6:6f58:e30e:ad97
+    //   DET         : 2001:30:3ff8:405:8412:4323:5d3c:a050  (RAA=255 HDA=14340)
     // -----------------------------------------------------------------------
     {
       {   // seed (Ed25519 private, RFC 8032)
@@ -119,14 +123,14 @@ static const IdentityRow IDENTITY_TABLE[DET_IDENTITY_SLOTS] = {
           0xAB, 0xBD, 0x3C, 0x3F, 0x1C, 0xB1, 0x6F, 0xE2
       },
       {   // expected DET — cSHAKE128 ORCHID, RFC 9374 3.5.2; self-checked at boot
-          0x20, 0x01, 0x00, 0x30, 0xFA, 0x07, 0xD0, 0x05,
-          0xF3, 0xB6, 0x6F, 0x58, 0xE3, 0x0E, 0xAD, 0x97
+          0x20, 0x01, 0x00, 0x30, 0x3F, 0xF8, 0x04, 0x05,
+          0x84, 0x12, 0x43, 0x23, 0x5D, 0x3C, 0xA0, 0x50
       }
     },
     // -----------------------------------------------------------------------
-    // SLOT 2 — fleet slot 2
+    // SLOT 2 — fleet slot 2  (same seed as before; DET changes with RAA/HDA)
     //   seed origin : shake128(b"DRIP PoC UA slot 2", 32)
-    //   DET         : 2001:30:fa07:d005:5584:4fa7:8f0d:14d7
+    //   DET         : 2001:30:3ff8:405:a57e:87ab:5388:cbb8  (RAA=255 HDA=14340)
     // -----------------------------------------------------------------------
     {
       {   // seed (Ed25519 private, RFC 8032)
@@ -142,8 +146,8 @@ static const IdentityRow IDENTITY_TABLE[DET_IDENTITY_SLOTS] = {
           0xC6, 0x9E, 0x7F, 0xB7, 0xAE, 0xAA, 0xC3, 0xAC
       },
       {   // expected DET — cSHAKE128 ORCHID, RFC 9374 3.5.2; self-checked at boot
-          0x20, 0x01, 0x00, 0x30, 0xFA, 0x07, 0xD0, 0x05,
-          0x55, 0x84, 0x4F, 0xA7, 0x8F, 0x0D, 0x14, 0xD7
+          0x20, 0x01, 0x00, 0x30, 0x3F, 0xF8, 0x04, 0x05,
+          0xA5, 0x7E, 0x87, 0xAB, 0x53, 0x88, 0xCB, 0xB8
       }
     },
 };
@@ -177,30 +181,38 @@ static void build_upper64(uint16_t raa, uint16_t hda, uint8_t suite,
 
 // ---------------------------------------------------------------------------
 // DET computation — RFC 9374 §3.5.2, parameterised by (RAA, HDA).
-//   ORCHID input := upper64(8) || HOST_ID(36)                    (44 bytes)
-//   HOST_ID (EdDSA25519, RFC 9374 §3.4.1.1 Fig 2, per RFC 9373):
-//       EdDSA Curve(0x0001) | NULL(0x0000) | PublicKey(32)       (36 bytes)
+//   ORCHID input := upper64(8) || HOST_ID(32)                    (40 bytes)
+//   HOST_ID (EdDSA25519): the RAW 32-byte public key.
+//
+//   *** RAW KEY, NOT the 4-byte-wrapped HIP HOST_ID parameter. ***
+//   RFC 9374 §3.5.2 says the hash input ends in HOST_ID. The HIP HOST_ID
+//   PARAMETER (§3.4.1.1 / Fig 2) carries EdDSA Curve(2)|NULL(2)|Key(32) = 36 B,
+//   but that framing is for a HIP protocol exchange. The DET ORCHID hash uses
+//   the raw Host Identity (the 32-byte key) with NO Curve/NULL wrapper. This is
+//   what the reference implementation (Moskowitz, det-gen.py) and deployed DRIP
+//   DNS use; it was verified byte-for-byte against a live DET
+//   (2001:30:3ff8:405:d952:5618:fbc9:c3cf). An earlier version of this file
+//   inserted the 4-byte 0x0001|0x0000 wrapper and produced DETs that matched no
+//   other implementation.
+//
 //   hash    := cSHAKE128(ORCHID input, L=64 bits, N="", S=Context ID)
 //   DET     := upper64(8) || hash(8)                             (16 bytes)
 //
 // This is the SINGLE DET implementation in the codebase. Every UA slot uses it,
 // and the test build's parent DETs use it too (drip_registration.cpp), so the
-// two can never diverge — that divergence was exactly the bug that produced
-// non-conformant parent DETs.
+// two can never diverge.
 // ---------------------------------------------------------------------------
 void det_compute(const uint8_t pubkey[ED25519_PUBKEY_BYTES],
                  uint16_t raa, uint16_t hda, uint8_t det[DET_BYTES]) {
     uint8_t upper[8];
     build_upper64(raa, hda, HHIT_OGA_ID, upper);
 
-    uint8_t orchid_input[8 + 36];
+    uint8_t orchid_input[8 + 32];                       // 40 bytes: header || raw key
     memcpy(orchid_input, upper, 8);
-    orchid_input[8]  = 0x00; orchid_input[9]  = 0x01;   // EdDSA Curve = 1 (EdDSA25519)
-    orchid_input[10] = 0x00; orchid_input[11] = 0x00;   // NULL
-    memcpy(&orchid_input[12], pubkey, 32);              // Public Key (32)
+    memcpy(&orchid_input[8], pubkey, 32);               // RAW 32-byte HI (no wrapper)
 
     uint8_t hash[8];
-    cshake128(orchid_input, sizeof(orchid_input),       // input (44 bytes)
+    cshake128(orchid_input, sizeof(orchid_input),       // input (40 bytes)
               DET_CONTEXT_ID, sizeof(DET_CONTEXT_ID),   // S = Context ID
               hash, 64);                                // L = 64 bits
 

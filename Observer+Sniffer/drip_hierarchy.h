@@ -73,8 +73,8 @@
 
 // The UA's numbers. Every virtual UA in the fleet is registered by the same
 // HDA, which is the realistic shape: one HDA registers many aircraft.
-#define DRIP_UA_RAA        1000u   // 0x03E8
-#define DRIP_UA_HDA        2000u   // 0x07D0
+#define DRIP_UA_RAA        255u    // 0x00FF
+#define DRIP_UA_HDA        14340u  // 0x3804
 
 // The Apex owns the whole 2001:30::/28 prefix and sits above all RAAs, so it
 // holds no RAA/HDA of its own. Zero is the "no delegation applied yet" value.
@@ -92,22 +92,35 @@
 #define DRIP_HDA_RAA       DRIP_UA_RAA
 #define DRIP_HDA_HDA       DRIP_UA_HDA
 
-// Compile-time enforcement of the nesting rule. These cannot catch a bad DET
-// (that needs the keys, hence check_hierarchy.py), but they catch the specific
-// mistake that produced an undelegable chain for weeks.
+// Compile-time enforcement that the parent authorities carry the SAME RAA/HDA
+// numbers as the UAs. This is what keeps the fabricated Apex->RAA->HDA->UA chain
+// coherent: an RAA issues its own RAA number, and an HDA carries both the RAA it
+// lives under and its own HDA number. These guards cannot validate a DET (that
+// needs the keys -> check_hierarchy.py); they catch the number-mismatch mistake.
+//
+// NOTE on zones (RFC 9886 §3, §6.2.1.3): the RAA occupies a /44 and the HDA a
+// /56 in DNS, but the boundary is the "nibble borrow" of §6.2.1.3 (the RAA
+// borrows the top two bits of the HDA field), NOT a plain prefix-containment of
+// the HDA's DET inside the RAA's /44. Do not reintroduce a "/44 contains HDA
+// DET" test here; that is not the RFC rule. check_hierarchy.py implements the
+// real range/reserved-value checks.
 #if (DRIP_RAA_RAA != DRIP_UA_RAA)
-#error "drip_hierarchy.h: DRIP_RAA_RAA must equal DRIP_UA_RAA, or the UA DETs \
-will not fall inside the RAA's /44 zone (RFC 9886 §6) and the chain cannot be \
-delegated in DNS."
+#error "drip_hierarchy.h: DRIP_RAA_RAA must equal DRIP_UA_RAA (an RAA issues the \
+RAA number its UAs live under)."
 #endif
 #if (DRIP_HDA_RAA != DRIP_UA_RAA) || (DRIP_HDA_HDA != DRIP_UA_HDA)
 #error "drip_hierarchy.h: DRIP_HDA_RAA/DRIP_HDA_HDA must equal DRIP_UA_RAA/ \
-DRIP_UA_HDA, or the UA DETs will not fall inside the HDA's /56 zone \
-(RFC 9886 §6)."
+DRIP_UA_HDA (the HDA that registered the UAs carries both of their numbers)."
 #endif
 #if (DRIP_UA_RAA > 16383u) || (DRIP_UA_HDA > 16383u)
-#error "drip_hierarchy.h: RAA and HDA are 14-bit fields (RFC 9374 §3.5.2); \
+#error "drip_hierarchy.h: RAA and HDA are 14-bit fields (RFC 9374 §3.3); \
 maximum 16383."
+#endif
+// RFC 9886 §3: HDA values 0, 4096, 8192, 12288 are RESERVED for the RAA's own
+// operational use (the nibble-borrow bases). A UA/HDA must not use them.
+#if (DRIP_UA_HDA == 0u) || (DRIP_UA_HDA == 4096u) || (DRIP_UA_HDA == 8192u) || (DRIP_UA_HDA == 12288u)
+#error "drip_hierarchy.h: DRIP_UA_HDA is a reserved value (0/4096/8192/12288, \
+RFC 9886 §3 / §6.2.1.3). Pick another HDA."
 #endif
 
 // -----------------------------------------------------------------------------
@@ -146,18 +159,21 @@ maximum 16383."
 //  are reproduced in hierarchy.json for the Python side, and check_hierarchy.py
 //  re-derives them from scratch rather than trusting either copy.
 //
-//    Apex 0/0        2001:30:0:5:881e:c792:8833:e0fb
-//    RAA  1000/0     2001:30:fa00:5:32fd:cbfe:b2f4:3c02       zone 2001:30:fa00::/44
-//    HDA  1000/2000  2001:30:fa07:d005:8462:788f:47c8:b813    zone 2001:30:fa07:d000::/56
-//    UA0  1000/2000  2001:30:fa07:d005:31e0:1aed:4e7e:cf5c
-//    UA1  1000/2000  2001:30:fa07:d005:f3b6:6f58:e30e:ad97
-//    UA2  1000/2000  2001:30:fa07:d005:5584:4fa7:8f0d:14d7
+//    Apex 0/0        2001:30:0:5:70f9:e8e9:b564:f448
+//    RAA  255/0      2001:30:3fc0:5:9024:e82a:8fd0:afb8       zone 2001:30:3fc0::/44
+//    HDA  255/14340  2001:30:3ff8:405:d162:233e:9b7e:feee     zone 2001:30:3ff8:400::/56
+//    UA0  255/14340  2001:30:3ff8:405:d952:5618:fbc9:c3cf     (new keypair)
+//    UA1  255/14340  2001:30:3ff8:405:8412:4323:5d3c:a050
+//    UA2  255/14340  2001:30:3ff8:405:a57e:87ab:5388:cbb8
 //
-//  HDA ∈ RAA /44 : yes      UA0..2 ∈ HDA /56 : yes
+//  DET METHOD: RAW 32-byte key (RFC 9374 reference / Moskowitz det-gen.py),
+//  NOT the 4-byte-wrapped HIP HOST_ID parameter. UA0 = d952:5618:fbc9:c3cf was
+//  verified byte-for-byte against the reference generator and a live deployment.
 //
-//  The UA DETs are UNCHANGED by the renumbering: a UA's DET depends on its own
-//  RAA/HDA and its own key, never on its parents'. Captures taken before this
-//  change still validate against the same UA keys.
+//  RAA/HDA = 255/14340. RAA 255 is in the ISO 3166-1 country range; used here
+//  as a test stand-in. HDA 14340 is valid (block 11, != reserved base 12288).
+//
+//  A UA's DET depends on its OWN RAA/HDA and its OWN key, never on its parents'.
 // -----------------------------------------------------------------------------
 
 #endif // DRIP_HIERARCHY_H

@@ -22,21 +22,30 @@ WHAT IT PROVES
                    the file's own DET fields are checked, not read.
   2. AGREEMENT   - drip_hierarchy.h and hierarchy.json state the same numbers,
                    and the header's private seeds produce the JSON's public keys.
-  3. NESTING     - the zones actually contain their children (RFC 9886 section 6):
-                       HDA's DET must lie inside the RAA's /44
-                       every UA's DET must lie inside the HDA's /56
+  3. VALIDITY    - the RAA/HDA numbers are well-formed and coherent per the
+                   ACTUAL RFC 9886 rules (6.2.1 Table 1 + 6.2.1.3 nibble split):
+                       - RAA in a defined range (country / FCFS / private-use)
+                       - HDA is NOT a reserved value (0/4096/8192/12288)
+                       - the HDA authority and every UA carry the SAME RAA/HDA
+                         numbers (read from the DET field bits, RFC 9374 3.3)
                    This is the check that matters and the one nothing else does.
 
-WHY NESTING IS NOT AUTOMATIC
-----------------------------
-RFC 9575 section 6.4.2 - the Broadcast Endorsement chain the observer already
-walks - verifies SIGNATURES ONLY. It never looks at zones. So a hierarchy can
-verify perfectly offline and still be impossible to publish in DNS.
+CORRECTION (important)
+----------------------
+An earlier version tested "the HDA's DET must lie inside the RAA's /44 and the
+UA inside the HDA's /56" (IPv6 prefix containment). That is NOT the RFC rule.
+RFC 9886 6.2.1.3 defines the RAA/HDA relationship via a "nibble borrow" (the RAA
+borrows the top two bits of the HDA field), and reserves HDA 0/4096/8192/12288.
+The old containment test wrongly rejected valid pairs (e.g. RAA=255/HDA=14340).
+The coherence that actually makes a chain delegable is that parents and children
+share the same RAA/HDA numbers - which is decided from the numbers, not from
+prefix arithmetic. Zones are printed for information only.
 
-That is not hypothetical: this project ran for weeks with Apex=0/0, RAA=1/0,
-HDA=1/1 while the UAs used 1000/2000. Every self-test passed. But the HDA's zone
-was 2001:30:40:100::/56 and the UAs sat at 2001:30:fa07:d005:... - outside it.
-The chain was cryptographically sound and undelegable, and nothing said so.
+WHY THIS IS NOT AUTOMATIC
+-------------------------
+RFC 9575 section 6.4.2 - the Broadcast Endorsement chain the observer already
+walks - verifies SIGNATURES ONLY. It never looks at the numbers. So a hierarchy
+can verify perfectly offline and still carry mismatched RAA/HDA numbers.
 
 Exit status 0 = coherent, 1 = a problem (so it can gate a build).
 """
@@ -117,13 +126,50 @@ def main():
     problems = []
     h = json.load(open(args.json, encoding="utf-8"))
     print(f"hierarchy: {args.json}")
-    print(f"  UA numbers: RAA={h['ua_raa']}  HDA={h['ua_hda']}\n")
+
+    # The both-chains file uses plural "raas"/"hdas". The firmware header
+    # describes ONE chain (the currently-flashed UA RAA/HDA). We validate THAT
+    # chain here: pick the raa/hda entries whose numbers match the header (or the
+    # file's ua_raa/ua_hda when there is no header). Singular "raa"/"hda"/"apex"
+    # are still honoured for the one-chain schema.
+    def pick(key_plural, key_single, want_raa, want_hda):
+        if key_single in h:
+            return h[key_single]
+        for e in h.get(key_plural, []):
+            if e["raa"] == want_raa and (want_hda is None or e["hda"] == want_hda):
+                return e
+        return None
+
+    # Determine which chain to check.
+    hdr_nums = None
+    try:
+        hdr_probe = parse_header(args.header)
+        hdr_nums = hdr_probe["nums"]
+    except SystemExit:
+        hdr_nums = None
+
+    if hdr_nums:
+        want_raa, want_hda = hdr_nums["DRIP_UA_RAA"], hdr_nums["DRIP_UA_HDA"]
+    elif "ua_raa" in h:
+        want_raa, want_hda = h["ua_raa"], h["ua_hda"]
+    else:
+        # infer from the first hda entry
+        first = (h.get("hdas") or [h.get("hda")])[0]
+        want_raa, want_hda = first["raa"], first["hda"]
+    print(f"  Validating chain: RAA={want_raa}  HDA={want_hda}\n")
+
+    apex_e = h.get("apex")
+    raa_e  = pick("raas", "raa", want_raa, 0) or pick("raas", "raa", want_raa, None)
+    hda_e  = pick("hdas", "hda", want_raa, want_hda)
+    if raa_e is None or hda_e is None or apex_e is None:
+        print("ERROR: could not find a complete apex/raa/hda chain for "
+              f"RAA={want_raa} HDA={want_hda} in {args.json}")
+        return 1
 
     # ---- 1. DERIVATION -----------------------------------------------------
     print("1. DERIVATION  (re-derive every DET from its public key, RFC 9374 3.5.2)")
     ents = {}
-    for name in ("apex", "raa", "hda"):
-        e = h[name]
+    for name, e in (("apex", apex_e), ("raa", raa_e), ("hda", hda_e)):
         pub = bytes.fromhex(e["public_key"])
         claimed = bytes.fromhex(e["det"])
         actual = det.compute_det(pub, e["raa"], e["hda"])
@@ -143,10 +189,10 @@ def main():
         print(f"   SKIPPED: {e}")
         hdr = None
     if hdr:
-        pairs = [("DRIP_UA_RAA", h["ua_raa"]), ("DRIP_UA_HDA", h["ua_hda"]),
-                 ("DRIP_APEX_RAA", h["apex"]["raa"]), ("DRIP_APEX_HDA", h["apex"]["hda"]),
-                 ("DRIP_RAA_RAA", h["raa"]["raa"]),  ("DRIP_RAA_HDA", h["raa"]["hda"]),
-                 ("DRIP_HDA_RAA", h["hda"]["raa"]),  ("DRIP_HDA_HDA", h["hda"]["hda"])]
+        pairs = [("DRIP_UA_RAA", want_raa), ("DRIP_UA_HDA", want_hda),
+                 ("DRIP_APEX_RAA", apex_e["raa"]), ("DRIP_APEX_HDA", apex_e["hda"]),
+                 ("DRIP_RAA_RAA", raa_e["raa"]),  ("DRIP_RAA_HDA", raa_e["hda"]),
+                 ("DRIP_HDA_RAA", hda_e["raa"]),  ("DRIP_HDA_HDA", hda_e["hda"])]
         for key, jval in pairs:
             hval = hdr["nums"][key]
             if hval != jval:
@@ -166,20 +212,55 @@ def main():
                 print(f"   {name} seed -> public key            *** MISMATCH ***")
         print("   header seeds reproduce the json public keys")
 
-    # ---- 3. NESTING --------------------------------------------------------
-    print("\n3. NESTING  (RFC 9886 section 6 - the check that decides delegability)")
-    raa_zone = zone_of(ents["raa"]["det"], 44)
-    hda_zone = zone_of(ents["hda"]["det"], 56)
-    print(f"   RAA /44 zone : {raa_zone}")
-    print(f"   HDA /56 zone : {hda_zone}")
+    # ---- 3. HIERARCHY VALIDITY  (RFC 9886 6.2.1 / 6.2.1.3) -----------------
+    #
+    # CORRECTED RULE. An earlier version of this file tested "the HDA's DET must
+    # lie inside the RAA's /44" (prefix containment). That is NOT the RFC rule and
+    # it wrongly rejects valid pairs such as RAA=255/HDA=14340. The real rules are:
+    #
+    #   (a) RAA range (RFC 9886 6.2.1, Table 1):
+    #         0-3 reserved | 4-3999 ISO-3166 country | 4000-8191 reserved |
+    #         8192-15359 FCFS | 15360-16383 private-use (testing)
+    #   (b) HDA reserved values (RFC 9886 3 / 6.2.1.3): 0, 4096, 8192, 12288 are
+    #       reserved for the RAA's own operational use (nibble-borrow bases).
+    #   (c) Coherence: the HDA authority and every UA must carry the SAME RAA/HDA
+    #       numbers as each other, read from the DET's own field bits (RFC 9374
+    #       3.3). This is what actually makes the chain delegable, and it is
+    #       decidable from the numbers - no prefix-containment arithmetic.
+    #
+    # DNS zones are still shown for information (RAA /44, HDA /56), but zone
+    # containment is NOT used as a pass/fail test.
+    print("\n3. HIERARCHY VALIDITY  (RFC 9886 6.2.1 / 6.2.1.3)")
 
-    hda_in = ipaddress.IPv6Address(ents["hda"]["det"]) in raa_zone
-    print(f"   HDA inside the RAA's zone : {'yes' if hda_in else 'NO'}")
-    if not hda_in:
-        problems.append(f"the HDA's DET is not inside the RAA's /44 ({raa_zone}). "
-                        f"DRIP_HDA_RAA must equal DRIP_RAA_RAA.")
+    def raa_range_note(raa):
+        if raa <= 3:            return "reserved"
+        if raa <= 3999:         return "ISO-3166 country (IESG approval)"
+        if raa <= 8191:         return "reserved"
+        if raa <= 15359:        return "unassigned (FCFS)"
+        return "private-use (testing)"
 
-    # UA keys: the observer's built-ins unless a keyring is supplied
+    RESERVED_HDA = {0, 4096, 8192, 12288}
+
+    raa_f = det.parse_det(ents["raa"]["det"])
+    hda_f = det.parse_det(ents["hda"]["det"])
+    print(f"   RAA number {raa_f['raa']:5d}  -> {raa_range_note(raa_f['raa'])}")
+    print(f"   HDA number {hda_f['hda']:5d}  -> "
+          f"{'RESERVED - INVALID' if hda_f['hda'] in RESERVED_HDA else 'usable'}")
+    print(f"   (info) RAA /44 zone : {zone_of(ents['raa']['det'], 44)}")
+    print(f"   (info) HDA /56 zone : {zone_of(ents['hda']['det'], 56)}")
+
+    if not (0 <= raa_f['raa'] <= 16383):
+        problems.append(f"RAA {raa_f['raa']} is outside the 14-bit range.")
+    if hda_f['hda'] in RESERVED_HDA:
+        problems.append(f"HDA {hda_f['hda']} is reserved for the RAA "
+                        f"(0/4096/8192/12288, RFC 9886 3). Pick another HDA.")
+    # HDA authority must carry the RAA's number.
+    if hda_f['raa'] != raa_f['raa']:
+        problems.append(f"HDA authority RAA field ({hda_f['raa']}) != RAA "
+                        f"authority number ({raa_f['raa']}). The HDA must live "
+                        f"under its RAA (RFC 9374 3.3).")
+
+    # UA keys: the observer's built-ins unless a keyring is supplied.
     uas = []
     if args.ua_keys:
         for ln, line in enumerate(open(args.ua_keys, encoding="utf-8"), 1):
@@ -188,20 +269,31 @@ def main():
                 uas.append((f"{args.ua_keys}:{ln}", bytes.fromhex(t[0]), bytes.fromhex(t[1])))
     else:
         try:
-            import observer
+            import identity_resolve
+            trust = identity_resolve.load_trust(args.json)
             uas = [(lbl, bytes.fromhex(d), bytes.fromhex(p))
-                   for d, p, lbl in observer.BUILTIN_KEYS]
+                   for d, p, lbl in identity_resolve.iter_known_keys(trust)
+                   if lbl.lower().startswith(("slot", "ua"))]
+            if not uas:  # fall back to all keyed entities if none are labelled UA
+                uas = [(lbl, bytes.fromhex(d), bytes.fromhex(p))
+                       for d, p, lbl in identity_resolve.iter_known_keys(trust)]
         except Exception as e:
-            print(f"   (could not load the observer's built-in UA keys: {e})")
+            print(f"   (could not load UA keys from {args.json}: {e})")
 
     for lbl, d, pub in uas:
-        inside = ipaddress.IPv6Address(d) in hda_zone
+        f = det.parse_det(d)
+        # Only check UAs that belong to the chain under validation.
+        if f['raa'] != want_raa or f['hda'] != want_hda:
+            continue
+        # Coherence: the UA must carry the HDA's RAA/HDA numbers.
+        same = (f['raa'] == hda_f['raa'] and f['hda'] == hda_f['hda'])
         bound = det.verify_det_binding(d, pub)
         flags = []
-        if not inside:
-            flags.append("NOT IN HDA ZONE")
-            problems.append(f"UA {ipaddress.IPv6Address(d)} ({lbl}) is not inside the "
-                            f"HDA's /56 ({hda_zone}). Its RAA/HDA must match the HDA's.")
+        if not same:
+            flags.append(f"RAA/HDA {f['raa']}/{f['hda']} != HDA {hda_f['raa']}/{hda_f['hda']}")
+            problems.append(f"UA {ipaddress.IPv6Address(d)} ({lbl}) carries "
+                            f"{f['raa']}/{f['hda']}, not the HDA's "
+                            f"{hda_f['raa']}/{hda_f['hda']}.")
         if not bound:
             flags.append("DET/KEY BINDING FAILED")
             problems.append(f"UA {lbl}: DET does not derive from its public key")
@@ -217,7 +309,8 @@ def main():
         print("\nThis hierarchy cannot be published in DNS as-is.")
         return 1
     print("OK - the hierarchy is coherent, consistent across firmware and observer,")
-    print("     and the zones nest, so the chain is delegable in DNS.")
+    print("     the RAA/HDA numbers are well-formed (RFC 9886 6.2.1 / 6.2.1.3),")
+    print("     and parents and children share the same numbers, so it is delegable.")
     print("\nNOTE: this proves the STRUCTURE. It does not prove any registry has")
     print("      assigned these numbers (RFC 9374 3.3) - they are test values.")
     return 0

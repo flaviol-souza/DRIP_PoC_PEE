@@ -17,8 +17,10 @@
 #    ORCHID hash ............ RFC 9374 sec 3.5.2
 #                             hash = cSHAKE128(Prefix|HID|Suite|HOST_ID, L=64,
 #                                              N="", S=Context ID)
-#    HOST_ID (EdDSA25519) ... RFC 9374 sec 3.4.1.1, Figure 2 (per RFC 9373)
-#                             EdDSA Curve(2) | NULL(2) | Public Key(32) = 36 bytes
+#    HOST_ID (EdDSA25519) ... the RAW 32-byte public key. NOT the 4-byte-wrapped
+#                             HIP HOST_ID parameter (Curve|NULL|Key). Matches the
+#                             RFC 9374 reference generator (Moskowitz det-gen.py)
+#                             and deployed DRIP DNS; verified against a live DET.
 #    cSHAKE128 .............. NIST SP 800-185 (built on Keccak / FIPS 202)
 #    Ed25519 key ............ RFC 8032
 #    Base32 alphabet ........ RFC 9374 Appendix C, Table 14
@@ -159,8 +161,11 @@ EDDSA25519_CURVE = 1                                         # RFC 9374 sec 3.4,
 
 
 def host_id_eddsa25519(pub32):
-    """EdDSA25519 Host Identity field - RFC 9374 sec 3.4.1.1, Figure 2:
-       EdDSA Curve (2 bytes) || NULL (2 bytes) || Public Key (32 bytes)."""
+    """EdDSA25519 HIP HOST_ID PARAMETER - RFC 9374 sec 3.4.1.1, Figure 2:
+       EdDSA Curve (2 bytes) || NULL (2 bytes) || Public Key (32 bytes).
+
+    NOTE: this is the HIP protocol parameter framing. It is NOT used for the DET
+    ORCHID hash (see compute_det). Kept for reference / possible HIP-RR use."""
     assert len(pub32) == 32
     return EDDSA25519_CURVE.to_bytes(2, 'big') + b'\x00\x00' + pub32
 
@@ -179,9 +184,20 @@ def _upper64(raa, hda, suite):
 
 def compute_det(pub32, raa, hda, suite=SUITE_EDDSA_CSHAKE128):
     """Compute the 16-byte DET from an Ed25519 public key - RFC 9374 sec 3.5.2.
-       DET = upper64 || cSHAKE128(upper64 || HOST_ID, L=64 bits, N="", S=Context ID)."""
+
+       DET = upper64 || cSHAKE128(upper64 || HOST_ID, L=64, N="", S=Context ID)
+
+       *** HOST_ID here is the RAW 32-byte public key, NOT the 4-byte-wrapped HIP
+       HOST_ID parameter. *** RFC 9374 §3.5.2 ends the hash input with HOST_ID;
+       the HIP HOST_ID PARAMETER framing (Curve|NULL|Key, §3.4.1.1/Fig 2) is for
+       HIP exchanges and is NOT hashed here. The raw-key form is what the
+       reference generator (Moskowitz det-gen.py) and deployed DRIP DNS produce;
+       verified byte-for-byte against a live DET
+       (2001:30:3ff8:405:d952:5618:fbc9:c3cf). An earlier version wrapped the key
+       with 0x0001|0x0000 and produced DETs that matched no other implementation.
+    """
     upper = _upper64(raa, hda, suite)
-    orchid_input = upper + host_id_eddsa25519(pub32)
+    orchid_input = upper + bytes(pub32)                      # RAW 32-byte HI, no wrapper
     hash64 = cshake128(orchid_input, 8, N=b'', S=CONTEXT_ID)  # L = 64 bits = 8 bytes
     return upper + hash64
 
@@ -237,9 +253,9 @@ UA_PUB = bytes([
     0x87, 0x7A, 0x97, 0x72, 0x3E, 0x55, 0x7C, 0xB5, 0xF0, 0xD2, 0x18, 0x48, 0xBF, 0xE9, 0x44, 0x77,
 ])
 
-# DET derived from UA_PUB with (RAA=1000, HDA=2000, suite=5). Recorded so the
-# self-test can confirm the derivation is reproducible.
-UA_DET = bytes.fromhex("20010030fa07d00531e01aed4e7ecf5c")
+# DET derived from UA_PUB with (RAA=1000, HDA=2000, suite=5), RAW-KEY method.
+# Recorded so the self-test can confirm the derivation is reproducible.
+UA_DET = bytes.fromhex("20010030fa07d0054dfdc31103e51953")
 
 
 # =============================================================================

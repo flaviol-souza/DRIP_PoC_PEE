@@ -29,7 +29,7 @@ try:
     UA_DET = det.UA_DET
     UA_PUB = det.UA_PUB
 except Exception:                                  # fallback to recorded values
-    UA_DET = bytes.fromhex("20010030fa07d00531e01aed4e7ecf5c")
+    UA_DET = bytes.fromhex("20010030fa07d0054dfdc31103e51953")
     UA_PUB = None
 
 # Ed25519 private seed for signing valid Wrapper vectors (matches UA_PUB / on-device UA_PRIV_SEED)
