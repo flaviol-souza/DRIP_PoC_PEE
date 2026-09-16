@@ -1,5 +1,6 @@
 #pragma once
 #include <stdint.h>
+#include "drip_config.h"     // build switches (DRIP_TX_SOFTAP) — needed for the guard below
 #include "det_generator.h"
 #include "drone_playback.h"
 #include "drip_manifest.h"
@@ -58,7 +59,15 @@
 //        and each drone still needs a signature every ~333 ms.
 // ---------------------------------------------------------------------------
 
-#define FLEET_MAX               3      // <-- agreed scope cap; see note above
+#define FLEET_MAX               1      // <-- agreed scope cap; see note above
+
+// SoftAP is single-UA (one BSSID). The SoftAP backend physically cannot carry
+// more than one drone, so building it with a multi-drone fleet is a mistake we
+// catch at compile time (Spec 1 HU-2 / ADR 0001). Set FLEET_MAX=1 above when
+// enabling DRIP_TX_SOFTAP in drip_config.h.
+#if defined(DRIP_TX_SOFTAP) && (FLEET_MAX > 1)
+#error "DRIP_TX_SOFTAP e single-UA (um unico BSSID). Defina FLEET_MAX=1, ou use o backend de injecao crua (raw)."
+#endif
 
 #define FLEET_PACK_PERIOD_MS  1000      // per drone: 3 Hz pack rebuild (A/B/C)
 #define FLEET_BEACON_PERIOD_MS 500     // per drone: ~10 Hz beacon repeat (100 TU)

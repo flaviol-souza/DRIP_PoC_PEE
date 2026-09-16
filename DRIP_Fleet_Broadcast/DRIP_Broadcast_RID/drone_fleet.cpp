@@ -1,6 +1,7 @@
 #include "drone_fleet.h"
 #include "drip_config.h"
 #include "beacon_tx_raw.h"
+#include "softap_tx.h"
 #include "f3411_messages.h"
 #include "message_pack.h"
 #include "drip_time.h"
@@ -12,6 +13,39 @@
 #include <Arduino.h>
 #include <string.h>
 #include <stdlib.h>
+
+// ---------------------------------------------------------------------------
+// Transport seam (ADR 0001). The scheduler is transport-agnostic; these three
+// wrappers select the radio ADAPTER at build time. Default = raw 802.11
+// injection (multi-drone). With DRIP_TX_SOFTAP = SoftAP VSIE (single-UA), where
+// the AP beacon engine repeats the IE, so the ~10 Hz repeat is a no-op.
+// ---------------------------------------------------------------------------
+static inline void drone_emit_send(uint8_t slot, const MessagePack *pack,
+                                   uint8_t msg_counter) {
+#ifdef DRIP_TX_SOFTAP
+    (void)slot;                       // single BSSID: slot is always 0
+    softap_tx_send(pack, msg_counter);
+#else
+    beacon_tx_raw_send(slot, pack, msg_counter);
+#endif
+}
+
+static inline void drone_emit_repeat(uint8_t slot) {
+#ifdef DRIP_TX_SOFTAP
+    (void)slot;                       // AP beacon engine re-emits the VSIE itself
+#else
+    beacon_tx_raw_repeat(slot);
+#endif
+}
+
+static inline void drone_emit_stop(uint8_t slot) {
+#ifdef DRIP_TX_SOFTAP
+    (void)slot;
+    softap_tx_stop();
+#else
+    beacon_tx_raw_stop(slot);
+#endif
+}
 
 // ---------------------------------------------------------------------------
 // Fleet state
@@ -132,7 +166,7 @@ static void fleet_set_size(uint8_t n, bool same, uint16_t same_flight) {
 
     // Take the drones being removed off the air BEFORE forgetting them.
     for (uint8_t i = n; i < FLEET_MAX; i++) {
-        if (g_fleet[i].active) beacon_tx_raw_stop(i);
+        if (g_fleet[i].active) drone_emit_stop(i);
         g_fleet[i].active = false;
     }
     for (uint8_t i = 0; i < n; i++) {
@@ -247,7 +281,7 @@ static void fleet_build_and_send(uint8_t slot, VirtualDrone *d) {
     }
 
     const uint8_t tx_counter = d->msg_counter++;   // per-UA (ASTM §5.4.4.2)
-    beacon_tx_raw_send(slot, &pack, tx_counter);
+    drone_emit_send(slot, &pack, tx_counter);
     drip_debug_print_pack(&pack, tx_counter, phase, slot, d->id.det);
 
     d->cycle++;
@@ -298,7 +332,7 @@ void fleet_tick(uint32_t now_ms) {
         // or signed, its Manifest chain does not advance, its counter freezes.
         // Selecting a flight for it resumes transmission.
         if (drone_playback_finished(&d->track)) {
-            if (!d->off_air) { beacon_tx_raw_stop(s); d->off_air = true; }
+            if (!d->off_air) { drone_emit_stop(s); d->off_air = true; }
             continue;
         }
         d->off_air = false;
@@ -312,8 +346,9 @@ void fleet_tick(uint32_t now_ms) {
             d->next_beacon_ms = now_ms + FLEET_BEACON_PERIOD_MS;
         } else if ((int32_t)(now_ms - d->next_beacon_ms) >= 0) {
             // Same pack, same Message Counter — ASTM §5.4.4.2 (BUR0050) permits
-            // repeating unchanged data. Only the 802.11 sequence advances.
-            beacon_tx_raw_repeat(s);
+            // repeating unchanged data. Raw: only the 802.11 sequence advances.
+            // SoftAP: no-op (the AP beacon engine repeats the VSIE itself).
+            drone_emit_repeat(s);
             d->next_beacon_ms = now_ms + FLEET_BEACON_PERIOD_MS;
         }
     }

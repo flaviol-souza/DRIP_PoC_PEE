@@ -12,6 +12,15 @@
 // DRIP_TEST_BE : provision a self-consistent FAKE Apex/RAA/HDA Broadcast
 //                Endorsement chain (drip_registration.*) for validation only.
 //                *** Comment this line out for a production / flight image. ***
+//
+// DRIP_TX_SOFTAP : select the SoftAP transmit backend (softap_tx.*) instead of
+//                the default raw 802.11 injection (beacon_tx_raw.*). SoftAP is
+//                SINGLE-UA (one BSSID), so when you enable it you MUST also set
+//                FLEET_MAX=1 in drone_fleet.h — the compile-time guard there
+//                (#error) enforces it. See ADR 0001 and .kiro/specs/softap-broadcast.
+//                Leave it commented for the multi-drone raw backend (default).
 // ---------------------------------------------------------------------------
 
-#define DRIP_TEST_BE
+// #define DRIP_TEST_BE
+
+ #define DRIP_TX_SOFTAP   // single-UA SoftAP backend; requires FLEET_MAX=1
