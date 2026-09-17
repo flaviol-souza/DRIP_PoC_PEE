@@ -2,6 +2,7 @@
 #include "drip_config.h"
 #include "beacon_tx_raw.h"
 #include "softap_tx.h"
+#include "ble_tx.h"
 #include "f3411_messages.h"
 #include "message_pack.h"
 #include "drip_time.h"
@@ -15,33 +16,46 @@
 #include <stdlib.h>
 
 // ---------------------------------------------------------------------------
-// Transport seam (ADR 0001). The scheduler is transport-agnostic; these three
-// wrappers select the radio ADAPTER at build time. Default = raw 802.11
-// injection (multi-drone). With DRIP_TX_SOFTAP = SoftAP VSIE (single-UA), where
-// the AP beacon engine repeats the IE, so the ~10 Hz repeat is a no-op.
+// Transport seam (ADR 0001 + ADR 0002). The scheduler is transport-agnostic;
+// these three wrappers select the radio ADAPTER at build time:
+//   * default              = raw 802.11 injection (multi-drone).
+//   * DRIP_TX_SOFTAP        = SoftAP VSIE (single-UA); the AP beacon engine
+//                            repeats the IE, so the ~10 Hz repeat is a no-op.
+//   * DRIP_TX_BLE           = BLE 5 extended advertising (single-UA MVP); the
+//                            BLE controller repeats the advert, so repeat is a
+//                            no-op too. slot is always 0 (one advertising set).
+// drip_config.h #errors if SOFTAP and BLE are both set (BLE-only).
 // ---------------------------------------------------------------------------
 static inline void drone_emit_send(uint8_t slot, const MessagePack *pack,
                                    uint8_t msg_counter) {
-#ifdef DRIP_TX_SOFTAP
+#if defined(DRIP_TX_SOFTAP)
     (void)slot;                       // single BSSID: slot is always 0
     softap_tx_send(pack, msg_counter);
+#elif defined(DRIP_TX_BLE)
+    (void)slot;                       // single advertising set: slot is always 0
+    ble_tx_send(pack, msg_counter);
 #else
     beacon_tx_raw_send(slot, pack, msg_counter);
 #endif
 }
 
 static inline void drone_emit_repeat(uint8_t slot) {
-#ifdef DRIP_TX_SOFTAP
+#if defined(DRIP_TX_SOFTAP)
     (void)slot;                       // AP beacon engine re-emits the VSIE itself
+#elif defined(DRIP_TX_BLE)
+    (void)slot;                       // BLE controller repeats the advert itself
 #else
     beacon_tx_raw_repeat(slot);
 #endif
 }
 
 static inline void drone_emit_stop(uint8_t slot) {
-#ifdef DRIP_TX_SOFTAP
+#if defined(DRIP_TX_SOFTAP)
     (void)slot;
     softap_tx_stop();
+#elif defined(DRIP_TX_BLE)
+    (void)slot;
+    ble_tx_stop();
 #else
     beacon_tx_raw_stop(slot);
 #endif

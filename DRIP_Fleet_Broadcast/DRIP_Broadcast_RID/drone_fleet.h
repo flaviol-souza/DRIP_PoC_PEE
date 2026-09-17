@@ -69,6 +69,15 @@
 #error "DRIP_TX_SOFTAP e single-UA (um unico BSSID). Defina FLEET_MAX=1, ou use o backend de injecao crua (raw)."
 #endif
 
+// BLE (Spec 2) is single-UA in the MVP: it uses ONE advertising set, so a
+// multi-drone fleet would put N identities on the same BLE MAC. Unlike SoftAP,
+// this is an MVP limit, not a physical one — BLE can run one advertising set per
+// drone. Remove this guard when S2-T11 (multi-drone BLE) adds per-drone sets.
+// See ADR 0002.
+#if defined(DRIP_TX_BLE) && (FLEET_MAX > 1)
+#error "DRIP_TX_BLE (MVP) e single-UA (um unico advertising set). Defina FLEET_MAX=1 ate o S2-T11 (multi-drone BLE)."
+#endif
+
 #define FLEET_PACK_PERIOD_MS  1000      // per drone: 3 Hz pack rebuild (A/B/C)
 #define FLEET_BEACON_PERIOD_MS 500     // per drone: ~10 Hz beacon repeat (100 TU)
 

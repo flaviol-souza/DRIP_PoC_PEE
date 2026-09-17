@@ -90,6 +90,7 @@ extern "C" {
 
 #include "beacon_tx_raw.h"   // raw 802.11 injection, one MAC per virtual drone
 #include "softap_tx.h"       // single-UA SoftAP backend (DRIP_TX_SOFTAP)
+#include "ble_tx.h"          // single-UA BLE ext-adv backend (DRIP_TX_BLE)
 #include "drone_fleet.h"     // the virtual UA fleet + its scheduler + commands
 
 // ---------------------------------------------------------------------------
@@ -112,11 +113,16 @@ void setup() {
 
     // Radio first: fleet_init() -> drip_manifest_init() seeds the hash chain
     // from esp_random(), which needs the RF hardware to be running to be a true
-    // hardware RNG. The transmit backend is selected at build time (ADR 0001):
-    // default = raw 802.11 injection (multi-drone); DRIP_TX_SOFTAP = single-UA
-    // SoftAP VSIE. Both bring the radio up before fleet_init().
-#ifdef DRIP_TX_SOFTAP
+    // hardware RNG. The transmit backend is selected at build time (ADR 0001 +
+    // ADR 0002):
+    //   default          = raw 802.11 injection (multi-drone);
+    //   DRIP_TX_SOFTAP   = single-UA SoftAP VSIE (Wi-Fi);
+    //   DRIP_TX_BLE      = single-UA BLE 5 extended advertising (BLE-only).
+    // Each brings its radio up before fleet_init().
+#if defined(DRIP_TX_SOFTAP)
     softap_tx_init();
+#elif defined(DRIP_TX_BLE)
+    ble_tx_init();
 #else
     beacon_tx_raw_init();
 #endif

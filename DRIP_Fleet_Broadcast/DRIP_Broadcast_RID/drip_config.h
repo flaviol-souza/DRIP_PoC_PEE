@@ -19,8 +19,21 @@
 //                FLEET_MAX=1 in drone_fleet.h — the compile-time guard there
 //                (#error) enforces it. See ADR 0001 and .kiro/specs/softap-broadcast.
 //                Leave it commented for the multi-drone raw backend (default).
+//
+// DRIP_TX_BLE  : select the BLE transmit backend (ble_tx.*) — BLE 5 extended
+//                advertising, BLE-only (Wi-Fi backends stay off). Single-UA in
+//                the MVP, so requires FLEET_MAX=1 (guard in drone_fleet.h).
+//                See ADR 0002 and .kiro/specs/ble-broadcast. Enabling it AND
+//                DRIP_TX_SOFTAP is an #error below (one transport at a time).
 // ---------------------------------------------------------------------------
 
-// #define DRIP_TEST_BE
+ #define DRIP_TEST_BE
 
- #define DRIP_TX_SOFTAP   // single-UA SoftAP backend; requires FLEET_MAX=1
+// #define DRIP_TX_SOFTAP   // single-UA SoftAP backend; requires FLEET_MAX=1
+ #define DRIP_TX_BLE      // BLE-only transport (Spec 2); keeps the Wi-Fi backends off
+
+// One transmit transport at a time. BLE is BLE-only: Wi-Fi + BLE coexistence on the
+// shared 2.4 GHz radio is out of scope (README). Catch the invalid combo at build time.
+#if defined(DRIP_TX_BLE) && defined(DRIP_TX_SOFTAP)
+#error "DRIP_TX_BLE e single-transport (BLE-only). Nao habilite DRIP_TX_SOFTAP junto (coexistencia Wi-Fi+BLE fora de escopo)."
+#endif
